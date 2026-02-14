@@ -96,7 +96,10 @@ def get_changed_files(
     return changed_files
 
 
+EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "768"))
+
+
 def ensure_collection(milvus_client: MilvusClient):
     if milvus_client.has_collection(COLLECTION_NAME):
         return
-    milvus_client.create_collection(COLLECTION_NAME, dimension=768, auto_id=True)
+    milvus_client.create_collection(COLLECTION_NAME, dimension=EMBEDDING_DIM, auto_id=True)

@@ -31,7 +31,7 @@ if not os.path.exists(INDEX_DATA_PATH):
     os.makedirs(INDEX_DATA_PATH)
 
 # --- Embedding Provider Selection ---
-EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "local")
+EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "local").lower()
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "768"))
 
 if EMBEDDING_PROVIDER == "gemini":
