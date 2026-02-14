@@ -2,9 +2,9 @@
   <img src="docs/banner.png" alt="MCP-Markdown-RAG" width="800" style="border-radius:10px;"/>
   <h1>MCP-Markdown-RAG</h1>
   <p>
-  <img alt="GitHub forks" src="https://img.shields.io/github/forks/Zackriya-Solutions/MCP-Markdown-RAG"/>
-  <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/Zackriya-Solutions/MCP-Markdown-RAG">
-  <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/Zackriya-Solutions/MCP-Markdown-RAG">
+  <img alt="GitHub forks" src="https://img.shields.io/github/forks/bitkyc08-arch/mcp-markdown-rag"/>
+  <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/bitkyc08-arch/mcp-markdown-rag">
+  <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/bitkyc08-arch/mcp-markdown-rag">
 </p>
 <p>
   <a href="LICENSE">
@@ -14,120 +14,99 @@
 </p>
 </div>
 
-A **Model Context Protocol (MCP)** server that provides a **local-first RAG engine** for your markdown documents. This server uses a file-based Milvus vector database to index your notes, enabling Large Language Models (LLMs) to perform semantic search and retrieve relevant content from your local files.
+> **Fork of [Zackriya-Solutions/MCP-Markdown-RAG](https://github.com/Zackriya-Solutions/MCP-Markdown-RAG)**
+> with multi-provider embedding support and configurable Milvus address.
 
-> [!NOTE]
-> This project is in active development. The API and implementation are subject to change. We are exploring future enhancements, including a potential port to an Obsidian plugin for seamless vault integration.
+A **Model Context Protocol (MCP)** server that provides a **RAG engine** for your markdown documents. This server uses a Milvus vector database to index your notes, enabling Large Language Models (LLMs) to perform semantic search and retrieve relevant content from your files.
 
-## 🎯 Key Features
+## What's Different in This Fork
 
-✅ **Local-First & Private**: All your data is processed and stored locally. Nothing is sent to a third-party service for indexing.
+| Feature | Upstream | This Fork |
+|---------|----------|-----------|
+| Embedding provider | Local model only | **Gemini, Voyage, OpenAI, Local** (configurable) |
+| Milvus address | Local file DB only | **Configurable** via `MILVUS_ADDRESS` env var |
+| Embedding dimension | Fixed 768 | **Configurable** via `EMBEDDING_DIM` env var |
+| Batch embedding | N/A | **Batched** (100 per request) to stay under API limits |
 
-✅ **Semantic Search for Markdown**: Go beyond simple keyword search. Find document sections based on conceptual meaning.
+## Key Features
 
-✅ **MCP Compatible**: Integrates with any MCP-supported host application like Claude Desktop, Windsurf, or Cursor.
+- **Semantic Search for Markdown**: Find document sections based on conceptual meaning, not just keywords.
+- **Multi-Provider Embeddings**: Choose between Gemini, Voyage AI, OpenAI, or the default local model.
+- **Incremental Indexing**: Only re-indexes changed files by comparing hashes and timestamps.
+- **MCP Compatible**: Integrates with any MCP-supported host (Claude Code, Claude Desktop, Windsurf, Cursor, etc.).
 
-✅ **Simple Tooling**: Provides two straightforward tools (`index_documents` and `search`) for managing and querying your knowledge base.
+## Installation & Setup
 
-## ⚙️ How It Works
+Requires **uv** (Python package manager).
 
-The server operates in two main phases, exposing its functionality through MCP tools.
-
-1.  **Indexing**:
-
-    - The `index_documents` tool is called with a path to your markdown files.
-    - The server reads the documents, splits them into logical chunks (e.g., by headings), and converts each chunk into a vector embedding.
-    - These embeddings, along with their metadata (original text, file path), are stored in a local Milvus vector database.
-    - You can run it in two modes:
-      - **Full Reindex** (force_reindex=True): Clears and rebuilds the entire index from scratch.
-      - **Incremental Update** (force_reindex=False, default): Automatically detects and re-indexes only changed files by comparing them against a tracking log. Deleted or modified chunks are pruned and replaced to keep the index up-to-date.
-      - **Recursive Indexing** (recursive=False, default): Recursively indexes all subdirectories.
-
-2.  **Searching**:
-
-    - When you ask a question in a host application, it uses the `search` tool.
-    - The server converts your query into a vector embedding.
-    - It then performs a similarity search against the Milvus database to find the most semantically relevant document chunks.
-    - The results are returned to the LLM, providing it with the context needed to answer your question accurately.
-
-    <div align="center" >
-    <img src="docs/mcp_search.png" alt="MCP Search" width="800" style="border-radius:10px;"/>
-    </div>
-
-## 🛠️ Available Tools
-
-- `index_documents`
-
-  - **Description**: Indexes Markdown documents for semantic search. Converts each file into structured vector chunks and inserts them into the Milvus database.
-  - **Incremental Indexing**: Automatically reindexes only changed files unless force_reindex=True is passed.
-  - **Arguments**:
-    - `directory` (string, optional): The path to the folder containing .md files. Defaults to current directory.
-    - `force_reindex` (boolean, optional): If True, clears and rebuilds the full index. Defaults to False.
-    - `recursive` (boolean, optional): If True, recursively indexes all subdirectories. Defaults to False.
-
-- `search`
-  - **Description**: Searches the indexed documents using semantic similarity.
-  - **Arguments**:
-    - `query` (string, required): Your natural language query.
-    - `limit` (integer, optional): Max number of chunks to return (default is usually 5–10).
-
-## 🚀 Installation & Setup
-
-This server requires **UV** (for running the Python server).
-
-### Step 1: Get the Server Code
-
-Clone this repository to your local machine:
+### Step 1: Clone
 
 ```bash
-git clone https://github.com/Zackriya-Solutions/MCP-Markdown-RAG.git
+git clone https://github.com/bitkyc08-arch/mcp-markdown-rag.git
 ```
 
 ### Step 2: Configure Your Host App
 
-Configure your MCP host application (e.g., Windsurf, Claude.app) to use the server. Add the following to your settings file:
+Add to your MCP host configuration:
 
 ```json
 {
   "mcpServers": {
-    "markdown_rag": {
+    "markdown-rag": {
       "command": "uv",
       "args": [
         "--directory",
-        "/ABSOLUTE/PATH/TO/MCP-Markdown-RAG",
+        "/ABSOLUTE/PATH/TO/mcp-markdown-rag",
         "run",
         "server.py"
-      ]
+      ],
+      "env": {
+        "EMBEDDING_PROVIDER": "gemini",
+        "EMBEDDING_MODEL": "gemini-embedding-001",
+        "EMBEDDING_DIM": "768",
+        "GEMINI_API_KEY": "${GEMINI_API_KEY}"
+      }
     }
   }
 }
 ```
 
-> **Note**: Replace `/ABSOLUTE/PATH/TO/MCP-Markdown-RAG` with the absolute path to where you cloned this repository.
+> Replace `/ABSOLUTE/PATH/TO/mcp-markdown-rag` with the actual path.
 
-> **Note**: The first run will take a while and the same for the first indexing, as it needs to download the embedding model(~50MB).
+## Environment Variables
 
-## 📈 What's Next? (Roadmap)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EMBEDDING_PROVIDER` | `local` | Embedding provider: `gemini`, `voyage`, `openai`, or `local` |
+| `EMBEDDING_MODEL` | (provider default) | Model name override (e.g. `gemini-embedding-001`, `voyage-3`, `text-embedding-3-small`) |
+| `EMBEDDING_DIM` | `768` | Embedding vector dimension |
+| `GEMINI_API_KEY` | — | API key for Gemini provider |
+| `VOYAGE_API_KEY` | — | API key for Voyage provider |
+| `OPENAI_API_KEY` | — | API key for OpenAI provider |
+| `MILVUS_ADDRESS` | `.db/milvus_markdown.db` | Milvus server address or local file path |
 
-We are actively working on improving the server. Future plans include:
+## Available Tools
 
-- **Performance Optimization**: Improve indexing by encoding inputs in batches, which should better manage CPU usage.
-- **Flexible Embedding Models**: Add support for other embedding models, such as the `BGEM3-large` model for potentially higher accuracy.
-- **Obsidian Plugin**: Explore creating a dedicated Obsidian plugin for a fully integrated experience.
+- **`index_documents`** — Index markdown files for semantic search.
+  - `current_working_directory` (string, required): Base directory path.
+  - `directory` (string, optional): Subdirectory to index. Defaults to `""`.
+  - `recursive` (boolean, optional): Recursively index subdirectories. Defaults to `false`.
+  - `force_reindex` (boolean, optional): Clear and rebuild index. Defaults to `false`.
 
-## 🐛 Debugging
+- **`search_documents`** — Search indexed documents by semantic similarity.
+  - `query` (string, required): Natural language query.
+  - `k` (integer, optional): Number of results to return. Defaults to `5`.
 
-You can use the MCP inspector to debug the server directly. Run the following command from the repository's root directory:
+- **`clear_index`** — Clear the vector database and reset tracking.
+
+## Debugging
 
 ```bash
-npx @modelcontextprotocol/inspector uv --directory /ABSOLUTE/PATH/TO/MCP-Markdown-RAG run server.py
+npx @modelcontextprotocol/inspector uv --directory /ABSOLUTE/PATH/TO/mcp-markdown-rag run server.py
 ```
 
-## 🤝 Contributing
+## License
 
-Contributions are welcome! Please feel free to open an issue or submit a pull request.
+Apache License 2.0 — see [LICENSE](LICENSE).
 
-## 🙏 Acknowledgments
-
-- The **[Model Context Protocol](https://modelcontextprotocol.io/introduction)** for the open standard that makes this possible.
-- The **[Milvus Project](https://milvus.io/)** for the powerful open-source vector database.
+This is a fork of [Zackriya-Solutions/MCP-Markdown-RAG](https://github.com/Zackriya-Solutions/MCP-Markdown-RAG). See individual source files for modification notices as required by the Apache 2.0 license.
