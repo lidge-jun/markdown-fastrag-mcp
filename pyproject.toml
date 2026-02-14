@@ -14,4 +14,5 @@ dependencies = [
     "pymilvus[model]>=2.5.11",
     "voyageai>=0.3.0",
     "openai>=1.0.0",
+    "google-auth>=2.20.0",
 ]

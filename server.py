@@ -3,7 +3,12 @@
 # Changes: multi-provider embedding support (Gemini/Voyage/OpenAI),
 #          configurable Milvus address, batch embedding for API limits.
 
+import json
 import os
+import sys
+import urllib.error
+import urllib.request
+from datetime import datetime, timedelta, timezone
 
 from fastmcp import FastMCP
 from llama_index.core import SimpleDirectoryReader
@@ -38,29 +43,159 @@ if not os.path.exists(INDEX_DATA_PATH):
 # --- Embedding Provider Selection ---
 EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "local").lower()
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "768"))
+embedding_log_details = ""
+
+
+class VertexEmbeddingFunction:
+    """Vertex AI native embedding function using publishers/google/models/*:predict."""
+
+    def __init__(self, model_name: str, project: str | None, location: str, dimensions: int):
+        from google.auth import default
+        from google.auth.transport.requests import Request
+
+        self.model_name = model_name
+        self.location = location
+        self.dimensions = dimensions if dimensions > 0 else None
+        self._request = Request()
+        self._credentials, detected_project = default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        self.project = project or detected_project
+        if not self.project:
+            raise ValueError("VERTEX_PROJECT is required for EMBEDDING_PROVIDER=vertex")
+        self.endpoint = (
+            f"https://{self.location}-aiplatform.googleapis.com/v1/projects/{self.project}"
+            f"/locations/{self.location}/publishers/google/models/{self.model_name}:predict"
+        )
+
+    def _ensure_access_token(self) -> str:
+        should_refresh = (
+            not self._credentials.valid
+            or not self._credentials.token
+            or self._credentials.expired
+        )
+        if not should_refresh and self._credentials.expiry:
+            threshold_ts = (datetime.now(timezone.utc) + timedelta(seconds=60)).timestamp()
+            expiry = self._credentials.expiry
+            if expiry.tzinfo is None:
+                expiry_ts = expiry.replace(tzinfo=timezone.utc).timestamp()
+            else:
+                expiry_ts = expiry.timestamp()
+            should_refresh = expiry_ts <= threshold_ts
+        if should_refresh:
+            self._credentials.refresh(self._request)
+        return str(self._credentials.token)
+
+    def _embed_batch(self, texts: list[str]) -> list[list[float]]:
+        payload = {"instances": [{"content": text} for text in texts]}
+        if self.dimensions:
+            payload["parameters"] = {"outputDimensionality": self.dimensions}
+
+        req = urllib.request.Request(
+            self.endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self._ensure_access_token()}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req) as response:
+                body = response.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:500]
+            raise RuntimeError(
+                f"[Vertex] Embedding request failed ({exc.code}): {detail}"
+            ) from exc
+
+        result = json.loads(body)
+        predictions = result.get("predictions", [])
+        if not isinstance(predictions, list):
+            raise ValueError("[Vertex] Invalid response: missing predictions array")
+        if len(predictions) != len(texts):
+            raise ValueError(
+                f"[Vertex] Embedding count mismatch: expected {len(texts)}, got {len(predictions)}"
+            )
+
+        vectors: list[list[float]] = []
+        for idx, prediction in enumerate(predictions):
+            embeddings = prediction.get("embeddings", {}) if isinstance(prediction, dict) else {}
+            values = embeddings.get("values") if isinstance(embeddings, dict) else None
+            if not isinstance(values, list):
+                raise ValueError(
+                    f"[Vertex] Invalid response shape at predictions[{idx}].embeddings.values"
+                )
+            vectors.append(values)
+        return vectors
+
+    def encode_documents(self, texts: list[str]) -> list[list[float]]:
+        return self._embed_batch(texts)
+
+    def encode_queries(self, texts: list[str]) -> list[list[float]]:
+        return self._embed_batch(texts)
+
 
 if EMBEDDING_PROVIDER == "gemini":
     from pymilvus.model.dense import OpenAIEmbeddingFunction
+    model_name = os.getenv("EMBEDDING_MODEL", "gemini-embedding-001")
     embedding_fn = OpenAIEmbeddingFunction(
-        model_name=os.getenv("EMBEDDING_MODEL", "gemini-embedding-001"),
+        model_name=model_name,
         api_key=os.getenv("GEMINI_API_KEY"),
         base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         dimensions=EMBEDDING_DIM,
     )
+    embedding_log_details = (
+        f"provider=gemini model={model_name} "
+        "base_url=https://generativelanguage.googleapis.com/v1beta/openai/"
+    )
 elif EMBEDDING_PROVIDER == "voyage":
     from pymilvus.model.dense import VoyageEmbeddingFunction
+    model_name = os.getenv("EMBEDDING_MODEL", "voyage-3")
     embedding_fn = VoyageEmbeddingFunction(
-        model_name=os.getenv("EMBEDDING_MODEL", "voyage-3"),
+        model_name=model_name,
         api_key=os.getenv("VOYAGE_API_KEY"),
     )
+    embedding_log_details = f"provider=voyage model={model_name}"
 elif EMBEDDING_PROVIDER == "openai":
     from pymilvus.model.dense import OpenAIEmbeddingFunction
+    model_name = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
     embedding_fn = OpenAIEmbeddingFunction(
-        model_name=os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"),
+        model_name=model_name,
         api_key=os.getenv("OPENAI_API_KEY"),
+    )
+    embedding_log_details = f"provider=openai model={model_name}"
+elif EMBEDDING_PROVIDER == "openai-compatible":
+    from pymilvus.model.dense import OpenAIEmbeddingFunction
+    model_name = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    base_url = os.getenv("EMBEDDING_BASE_URL")
+
+    embedding_fn = OpenAIEmbeddingFunction(
+        model_name=model_name,
+        api_key=os.getenv("EMBEDDING_API_KEY"),
+        base_url=base_url,
+        dimensions=EMBEDDING_DIM,
+    )
+    embedding_log_details = f"provider=openai-compatible model={model_name} base_url={base_url}"
+elif EMBEDDING_PROVIDER == "vertex":
+    model_name = os.getenv("EMBEDDING_MODEL", "gemini-embedding-001")
+    location = os.getenv("VERTEX_LOCATION", "us-central1")
+    embedding_fn = VertexEmbeddingFunction(
+        model_name=model_name,
+        project=os.getenv("VERTEX_PROJECT"),
+        location=location,
+        dimensions=EMBEDDING_DIM,
+    )
+    embedding_log_details = (
+        f"provider=vertex model={model_name} project={embedding_fn.project} "
+        f"location={location} endpoint={embedding_fn.endpoint}"
     )
 else:
     embedding_fn = model.DefaultEmbeddingFunction()  # 기본 로컬 (768d)
+    embedding_log_details = "provider=local model=DefaultEmbeddingFunction"
+
+print(f"[Embedding] {embedding_log_details} dim={EMBEDDING_DIM}", file=sys.stderr)
 
 # --- Milvus Client ---
 MILVUS_ADDRESS = os.getenv("MILVUS_ADDRESS", os.path.join(INDEX_DATA_PATH, "milvus_markdown.db"))

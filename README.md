@@ -23,7 +23,7 @@ A **Model Context Protocol (MCP)** server that provides a **RAG engine** for you
 
 | Feature | Upstream | This Fork |
 |---------|----------|-----------|
-| Embedding provider | Local model only | **Gemini, Voyage, OpenAI, Local** (configurable) |
+| Embedding provider | Local model only | **Gemini, OpenAI, OpenAI-compatible, Vertex AI, Voyage, Local** |
 | Milvus address | Local file DB only | **Configurable** via `MILVUS_ADDRESS` env var |
 | Embedding dimension | Fixed 768 | **Configurable** via `EMBEDDING_DIM` env var |
 | Batch embedding | N/A | **Batched** (100 per request) to stay under API limits |
@@ -31,7 +31,7 @@ A **Model Context Protocol (MCP)** server that provides a **RAG engine** for you
 ## Key Features
 
 - **Semantic Search for Markdown**: Find document sections based on conceptual meaning, not just keywords.
-- **Multi-Provider Embeddings**: Choose between Gemini, Voyage AI, OpenAI, or the default local model.
+- **Multi-Provider Embeddings**: Choose between Gemini, OpenAI, OpenAI-compatible providers, Vertex AI, Voyage AI, or the default local model.
 - **Incremental Indexing**: Only re-indexes changed files by comparing hashes and timestamps.
 - **MCP Compatible**: Integrates with any MCP-supported host (Claude Code, Claude Desktop, Windsurf, Cursor, etc.).
 
@@ -73,16 +73,60 @@ Add to your MCP host configuration:
 
 > Replace `/ABSOLUTE/PATH/TO/mcp-markdown-rag` with the actual path.
 
+### Vertex AI Example
+
+```json
+{
+  "mcpServers": {
+    "markdown-rag": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/ABSOLUTE/PATH/TO/mcp-markdown-rag",
+        "run",
+        "server.py"
+      ],
+      "env": {
+        "EMBEDDING_PROVIDER": "vertex",
+        "EMBEDDING_MODEL": "gemini-embedding-001",
+        "EMBEDDING_DIM": "768",
+        "GOOGLE_APPLICATION_CREDENTIALS": "/ABSOLUTE/PATH/service-account.json",
+        "VERTEX_PROJECT": "your-gcp-project-id",
+        "VERTEX_LOCATION": "us-central1"
+      }
+    }
+  }
+}
+```
+
+This uses Application Default Credentials (ADC), refreshes an OAuth token automatically, and calls the Vertex AI native predict endpoint (`publishers/google/models/{model}:predict`).
+
+## Provider Matrix
+
+| Provider | `EMBEDDING_PROVIDER` | Required env | Base URL | Auth |
+|----------|----------------------|--------------|----------|------|
+| OpenAI | `openai` | `OPENAI_API_KEY` | Default | API key |
+| OpenAI-compatible | `openai-compatible` | `EMBEDDING_API_KEY`, `EMBEDDING_BASE_URL` | Custom | API key |
+| Gemini | `gemini` | `GEMINI_API_KEY` | Google AI Studio | API key |
+| Vertex AI | `vertex` | `GOOGLE_APPLICATION_CREDENTIALS`, `VERTEX_PROJECT`, `VERTEX_LOCATION` | Vertex AI native predict API | OAuth token (auto-refresh) |
+| Voyage | `voyage` | `VOYAGE_API_KEY` | Default | API key |
+| Local | `local` | — | — | — |
+
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `EMBEDDING_PROVIDER` | `local` | Embedding provider: `gemini`, `voyage`, `openai`, or `local` |
-| `EMBEDDING_MODEL` | (provider default) | Model name override (e.g. `gemini-embedding-001`, `voyage-3`, `text-embedding-3-small`) |
+| `EMBEDDING_PROVIDER` | `local` | Embedding provider: `openai`, `openai-compatible`, `gemini`, `vertex`, `voyage`, or `local` |
+| `EMBEDDING_MODEL` | (provider default) | Model name override (e.g. `text-embedding-3-small`, `gemini-embedding-001`, `voyage-3`) |
 | `EMBEDDING_DIM` | `768` | Embedding vector dimension |
+| `EMBEDDING_API_KEY` | — | API key for `openai-compatible` provider |
+| `EMBEDDING_BASE_URL` | — | Base URL for `openai-compatible` provider |
 | `GEMINI_API_KEY` | — | API key for Gemini provider |
 | `VOYAGE_API_KEY` | — | API key for Voyage provider |
 | `OPENAI_API_KEY` | — | API key for OpenAI provider |
+| `GOOGLE_APPLICATION_CREDENTIALS` | — | Service account JSON path for Vertex ADC |
+| `VERTEX_PROJECT` | (auto-detected) | GCP project ID used in Vertex native predict path |
+| `VERTEX_LOCATION` | `us-central1` | Vertex AI region in native predict endpoint |
 | `MILVUS_ADDRESS` | `.db/milvus_markdown.db` | Milvus server address or local file path |
 
 ## Available Tools
