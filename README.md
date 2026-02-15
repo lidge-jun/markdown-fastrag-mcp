@@ -54,6 +54,8 @@ Add to your MCP host config:
 
 - **Semantic matching** — finds conceptually related content, not just keyword hits
 - **Multi-provider embeddings** — Gemini, OpenAI, Vertex AI, Voyage, or local models
+- **Smart chunk merging** — small chunks below `MIN_CHUNK_TOKENS` are merged with siblings; parent header context is injected for each chunk
+- **Search dedup** — per-file result limiting prevents a single document from dominating search results; k×5 oversampling ensures diversity
 - **Async background indexing** — non-blocking `index_documents` returns instantly with `job_id`; poll progress with `get_index_status`
 - **Smart incremental indexing** — mtime/size fast-path skips unchanged files without reading them; hash only computed when metadata changes
 - **Single-pass delta scan** — detects new, changed, and deleted files in one directory walk
@@ -125,18 +127,24 @@ graph TB
 ```mermaid
 flowchart LR
     A["📁 Markdown Files"] -->|"directory walk<br/>+ exclude filter"| B["🔍 Delta Scan<br/>mtime/size check"]
-    B -->|changed| C["✂️ Chunk<br/>SentenceSplitter"]
+    B -->|changed| C["✂️ Chunk<br/>MarkdownNodeParser"]
     B -->|unchanged| SKIP["⏭️ Skip"]
     B -->|deleted| PRUNE["🗑️ Prune<br/>Milvus delete"]
-    C --> D["🧠 Embed<br/>Vertex/Gemini/OpenAI"]
+    C --> M["🔗 Merge Small Chunks<br/>MIN_CHUNK_TOKENS=300"]
+    M --> H["📑 Header Inject<br/>parent heading context"]
+    H --> D["🧠 Embed<br/>Vertex/Gemini/OpenAI"]
     D -->|"batch insert"| E["💾 Milvus<br/>Vector Store"]
 
     F["🔎 Search Query"] --> D
-    D -->|"cosine similarity"| G["📊 Top-K Results<br/>with relevance %"]
+    D -->|"k×5 oversample"| DD["🔄 Dedup<br/>max 2 per file"]
+    DD --> G["📊 Top-K Results<br/>with relevance %"]
 
     style A fill:#2d3748,color:#e2e8f0
+    style M fill:#744210,color:#fefcbf
+    style H fill:#744210,color:#fefcbf
     style D fill:#553c9a,color:#e9d8fd
     style E fill:#2a4365,color:#bee3f8
+    style DD fill:#553c9a,color:#e9d8fd
     style G fill:#22543d,color:#c6f6d5
     style PRUNE fill:#742a2a,color:#fed7d7
 ```
@@ -630,17 +638,18 @@ index_documents(cwd, recursive=true) → get_index_status(job_id) → search_doc
 
 ### Indexing Tuning
 
-| Variable                       | Default | Description                                                                                                                                                                                |
-| ------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `MARKDOWN_CHUNK_SIZE`          | `2048`  | Token chunk size for splitting documents                                                                                                                                                   |
-| `MARKDOWN_CHUNK_OVERLAP`       | `100`   | Token overlap between chunks                                                                                                                                                               |
-| `MIN_CHUNK_TOKENS`             | `300`   | Optimized merge threshold (researched, 56% chunk reduction). May produce minor duplicate results; mitigated by planned dedup post-processing. Override via env; requires `--force` reindex |
-| `EMBEDDING_BATCH_SIZE`         | `250`   | Texts per embedding API call                                                                                                                                                               |
-| `EMBEDDING_BATCH_DELAY_MS`     | `0`     | Delay between embedding batches (ms). Set to `1000` for rate-limited APIs.                                                                                                                 |
-| `EMBEDDING_CONCURRENT_BATCHES` | `4`     | Parallel embedding batches                                                                                                                                                                 |
-| `MILVUS_INSERT_BATCH`          | `5000`  | Rows per Milvus insert call (gRPC 64MB limit)                                                                                                                                              |
-| `MARKDOWN_BG_MAX_JOBS`         | `1`     | Max concurrent active background index jobs                                                                                                                                                |
-| `MARKDOWN_BG_JOB_TTL_SECONDS`  | `1800`  | Keep succeeded/failed job metadata in memory for this many seconds                                                                                                                         |
+| Variable                       | Default | Description                                                                                                                                                          |
+| ------------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MARKDOWN_CHUNK_SIZE`          | `2048`  | Token chunk size for splitting documents                                                                                                                             |
+| `MARKDOWN_CHUNK_OVERLAP`       | `100`   | Token overlap between chunks                                                                                                                                         |
+| `MIN_CHUNK_TOKENS`             | `300`   | Small-chunk merge threshold. Chunks below this token count are merged with siblings. 56% chunk reduction vs no merge. Requires `--force` reindex to change           |
+| `DEDUP_MAX_PER_FILE`           | `1`     | Max results per file in search. Ensures maximum source diversity — each file contributes at most 1 chunk (k×5 oversampling feeds the selection pool). `0` = disabled |
+| `EMBEDDING_BATCH_SIZE`         | `250`   | Texts per embedding API call                                                                                                                                         |
+| `EMBEDDING_BATCH_DELAY_MS`     | `0`     | Delay between embedding batches (ms). Set to `1000` for rate-limited APIs.                                                                                           |
+| `EMBEDDING_CONCURRENT_BATCHES` | `4`     | Parallel embedding batches                                                                                                                                           |
+| `MILVUS_INSERT_BATCH`          | `5000`  | Rows per Milvus insert call (gRPC 64MB limit)                                                                                                                        |
+| `MARKDOWN_BG_MAX_JOBS`         | `1`     | Max concurrent active background index jobs                                                                                                                          |
+| `MARKDOWN_BG_JOB_TTL_SECONDS`  | `1800`  | Keep succeeded/failed job metadata in memory for this many seconds                                                                                                   |
 
 ### Exclusions
 

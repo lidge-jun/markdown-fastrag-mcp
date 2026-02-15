@@ -81,6 +81,7 @@ EMBEDDING_CONCURRENT_BATCHES = _get_int_env("EMBEDDING_CONCURRENT_BATCHES", 4, m
 MARKDOWN_BG_MAX_JOBS = _get_int_env("MARKDOWN_BG_MAX_JOBS", 1, minimum=1)
 MARKDOWN_BG_JOB_TTL_SECONDS = _get_int_env("MARKDOWN_BG_JOB_TTL_SECONDS", 1800, minimum=1)
 MIN_CHUNK_TOKENS = _get_int_env("MIN_CHUNK_TOKENS", 300, minimum=0)
+DEDUP_MAX_PER_FILE = _get_int_env("DEDUP_MAX_PER_FILE", 1, minimum=0)
 
 
 class VertexEmbeddingFunction:
@@ -658,11 +659,13 @@ async def _execute_index_job(
             _cleanup_expired_jobs_locked()
 
 def search(query: str, k: int, scope_path: str = "") -> list[list[SearchResult]]:
+    # Oversampling: fetch extra candidates so dedup can fill k slots with diverse files.
+    oversample = max(k * 5, 20) if DEDUP_MAX_PER_FILE > 0 else k
     query_vectors = embedding_fn.encode_queries([query])
     search_params = dict(
         collection_name=COLLECTION_NAME,
         data=query_vectors,
-        limit=k,
+        limit=oversample,
         output_fields=list(Entity.model_fields.keys()),
     )
     if scope_path:
@@ -672,7 +675,22 @@ def search(query: str, k: int, scope_path: str = "") -> list[list[SearchResult]]
         safe_prefix = scope_prefix.replace("'", "\\'")
         search_params["filter"] = f"path like '{safe_prefix}%'"
     res = milvus_client.search(**search_params)
-    return res
+
+    if not res or DEDUP_MAX_PER_FILE <= 0:
+        return res
+
+    # Dedup: limit results per file path to ensure diverse sources.
+    deduped = []
+    file_count: dict[str, int] = {}
+    for hit in res[0]:
+        fp = hit.entity.path
+        count = file_count.get(fp, 0)
+        if count < DEDUP_MAX_PER_FILE:
+            deduped.append(hit)
+            file_count[fp] = count + 1
+        if len(deduped) >= k:
+            break
+    return [deduped]
 
 
 @mcp.tool(
