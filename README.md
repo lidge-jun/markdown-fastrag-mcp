@@ -22,6 +22,67 @@ A semantic search engine for your markdown documents. An MCP server that indexes
 - **Milvus Standalone support** — connect to a Docker-based Milvus server for multi-agent concurrent access
 - **MCP native** — works with any MCP host (Claude Code, Cursor, Windsurf, VS Code, Antigravity, Codex, etc.)
 
+## Architecture
+
+```mermaid
+graph TB
+    subgraph MCP["MCP Server (server.py)"]
+        direction TB
+        IDX["index_documents<br/>Incremental Indexing"]
+        SEARCH["search_documents<br/>Semantic Search"]
+        CLEAR["clear_index<br/>Reset"]
+    end
+
+    subgraph Indexing["Indexing Engine (utils.py)"]
+        DELTA["get_index_delta<br/>Single-pass Delta Scan"]
+        TRACK["index_tracking.json<br/>mtime / size / hash"]
+        CHUNK["llama-index<br/>SentenceSplitter"]
+    end
+
+    subgraph Embed["Embedding Providers"]
+        VERTEX["Vertex AI<br/>gemini-embedding-001"]
+        GEMINI["Gemini API<br/>OpenAI-compat"]
+        OAI["OpenAI / Compatible"]
+        VOYAGE["Voyage AI<br/>voyage-3"]
+        LOCAL["Milvus Built-in<br/>DefaultEmbeddingFunction"]
+    end
+
+    subgraph Store["Vector Store"]
+        MILVUS["Milvus Standalone<br/>Docker (gRPC)"]
+        LITE["Milvus Lite<br/>SQLite (local)"]
+    end
+
+    IDX --> DELTA --> CHUNK --> Embed --> Store
+    SEARCH --> Embed --> Store
+    DELTA <--> TRACK
+
+    style MCP fill:#2d3748,color:#e2e8f0
+    style Embed fill:#553c9a,color:#e9d8fd
+    style Store fill:#2a4365,color:#bee3f8
+    style Indexing fill:#22543d,color:#c6f6d5
+```
+
+## How It Works
+
+```mermaid
+flowchart LR
+    A["📁 Markdown Files"] -->|"directory walk\n+ exclude filter"| B["🔍 Delta Scan\nmtime/size check"]
+    B -->|changed| C["✂️ Chunk\nSentenceSplitter"]
+    B -->|unchanged| SKIP["⏭️ Skip"]
+    B -->|deleted| PRUNE["🗑️ Prune\nMilvus delete"]
+    C --> D["🧠 Embed\nVertex/Gemini/OpenAI"]
+    D -->|"batch insert"| E["💾 Milvus\nVector Store"]
+
+    F["🔎 Search Query"] --> D
+    D -->|"cosine similarity"| G["📊 Top-K Results\nwith relevance %"]
+
+    style A fill:#2d3748,color:#e2e8f0
+    style D fill:#553c9a,color:#e9d8fd
+    style E fill:#2a4365,color:#bee3f8
+    style G fill:#22543d,color:#c6f6d5
+    style PRUNE fill:#742a2a,color:#fed7d7
+```
+
 ## Quick Start
 
 Requires [uv](https://docs.astral.sh/uv/) (Python package manager).
@@ -244,14 +305,22 @@ Milvus에 내장된 기본 임베딩 함수를 사용합니다 (`DefaultEmbeddin
 
 The indexing engine uses a **single-pass delta scan** to efficiently detect what changed:
 
-```
-Directory walk (1 pass)
-    ├── New file?           → index
-    ├── mtime/size same?    → skip (no file read, no hash)
-    ├── mtime/size changed? → compute hash
-    │   ├── hash different? → re-index
-    │   └── hash same?      → update tracking only (e.g. `touch`)
-    └── Tracked but missing? → prune from Milvus + remove from tracking
+```mermaid
+flowchart TD
+    START["Directory Walk"] --> NEW{"New file?"}
+    NEW -->|yes| INDEX["✅ Index"]
+    NEW -->|no| META{"mtime/size same?"}
+    META -->|yes| SKIP["⏭️ Skip\n(no file read)"]
+    META -->|no| HASH{"Compute hash\nContent changed?"}
+    HASH -->|yes| REINDEX["🔄 Re-index"]
+    HASH -->|no| UPDATE["📝 Update tracking\n(metadata only)"]
+    START --> MISSING{"Tracked but\nmissing from disk?"}
+    MISSING -->|yes| PRUNE["🗑️ Prune from Milvus\n+ remove tracking"]
+
+    style INDEX fill:#22543d,color:#c6f6d5
+    style SKIP fill:#2d3748,color:#e2e8f0
+    style REINDEX fill:#744210,color:#fefcbf
+    style PRUNE fill:#742a2a,color:#fed7d7
 ```
 
 **Performance** (1300+ files, 1 file changed):
@@ -381,4 +450,16 @@ Apache License 2.0 — see [LICENSE](LICENSE).
 
 ---
 
-*Forked from [MCP-Markdown-RAG](https://github.com/Zackriya-Solutions/MCP-Markdown-RAG) by Zackriya Solutions. Extended with multi-provider embeddings (Vertex AI native), single-pass incremental indexing with mtime/size fast-path, stale vector pruning, batch processing, shell reindex CLI, configurable exclusions, and Milvus Standalone support.*
+### About
+
+This project is a fork of [MCP-Markdown-RAG](https://github.com/Zackriya-Solutions/MCP-Markdown-RAG) by Zackriya Solutions, heavily extended for production use.
+
+**Key additions over upstream**:
+- Multi-provider embeddings (Vertex AI, Gemini, OpenAI, Voyage)
+- Single-pass incremental indexing with mtime/size fast-path
+- Stale vector pruning for deleted/moved files
+- Batch embedding with 429 retry + batch Milvus insert (gRPC 64MB limit)
+- Shell reindex CLI (`reindex.py`) with real-time progress
+- Configurable file/directory exclusions
+- Milvus Standalone (Docker) support for multi-agent concurrent access
+- Search results with relevance scores and file paths
