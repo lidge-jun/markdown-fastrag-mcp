@@ -1,5 +1,7 @@
 # Markdown-FastRAG-MCP
 
+[![PyPI version](https://img.shields.io/pypi/v/markdown-fastrag-mcp.svg)](https://pypi.org/project/markdown-fastrag-mcp/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/markdown-fastrag-mcp.svg)](https://pypi.org/project/markdown-fastrag-mcp/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green)](LICENSE)
 [![MCP Server](https://img.shields.io/badge/MCP-Server-blue)](https://modelcontextprotocol.io)
 [![Python](https://img.shields.io/badge/Python-%3E%3D3.10-blue.svg)](https://python.org/)
@@ -94,15 +96,19 @@ flowchart LR
 
 ## Quick Start
 
-Requires [uv](https://docs.astral.sh/uv/) (Python package manager).
-
-### 1. Clone
+### Install
 
 ```bash
-git clone https://github.com/bitkyc08-arch/markdown-fastrag-mcp.git
+pip install markdown-fastrag-mcp
 ```
 
-### 2. Configure
+Or with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv pip install markdown-fastrag-mcp
+```
+
+### Configure
 
 Add to your MCP host config:
 
@@ -110,11 +116,8 @@ Add to your MCP host config:
 {
   "mcpServers": {
     "markdown-rag": {
-      "command": "uv",
-      "args": [
-        "--directory", "/path/to/markdown-fastrag-mcp",
-        "run", "server.py"
-      ],
+      "command": "uvx",
+      "args": ["markdown-fastrag-mcp"],
       "env": {
         "EMBEDDING_PROVIDER": "gemini",
         "EMBEDDING_MODEL": "gemini-embedding-001",
@@ -127,7 +130,27 @@ Add to your MCP host config:
 }
 ```
 
-> **Tip**: For local-only use (no Docker), omit `MILVUS_ADDRESS` — it defaults to a local SQLite-based Milvus Lite file (`.db/milvus_markdown.db`).
+> **Tip**: For local-only use (no Docker), omit `MILVUS_ADDRESS` — it defaults to a local SQLite-based Milvus Lite file.
+
+<details>
+<summary><strong>Alternative: Install from source</strong></summary>
+
+```bash
+git clone https://github.com/bitkyc08-arch/markdown-fastrag-mcp.git
+cd markdown-fastrag-mcp
+uv sync
+```
+
+Then use `--directory` in your MCP config:
+
+```json
+{
+  "command": "uv",
+  "args": ["--directory", "/path/to/markdown-fastrag-mcp", "run", "server.py"]
+}
+```
+
+</details>
 
 ## Embedding Providers
 
@@ -274,11 +297,11 @@ Uses Voyage AI embedding models. `voyage-3` is optimized for retrieval tasks, ma
 
 **Available models**:
 
-| Model           | Dims | Max Tokens | Use Case              |
-| --------------- | ---- | ---------- | --------------------- |
-| `voyage-3`      | 1024 | 32K        | General (recommended) |
+| Model           | Dims | Max Tokens | Use Case               |
+| --------------- | ---- | ---------- | ---------------------- |
+| `voyage-3`      | 1024 | 32K        | General (recommended)  |
 | `voyage-3-lite` | 512  | 32K        | Lightweight / low-cost |
-| `voyage-code-3` | 1024 | 32K        | Code-optimized        |
+| `voyage-code-3` | 1024 | 32K        | Code-optimized         |
 
 **Note**: No need to set `EMBEDDING_DIM` separately. Voyage uses fixed dimensions per model.
 
@@ -402,12 +425,12 @@ The `_parse_tracking_entry()` parser reads both formats, so **no migration neede
 
 Handles common issues when sending thousands of texts to embedding APIs:
 
-| Problem                     | Solution                                                     |
-| --------------------------- | ----------------------------------------------------------- |
+| Problem                     | Solution                                                         |
+| --------------------------- | ---------------------------------------------------------------- |
 | API 429 (Too Many Requests) | Exponential backoff retry (5s → 10s → 20s → 40s, max 5 attempts) |
-| gRPC 64MB message limit     | Split inserts via `MILVUS_INSERT_BATCH=5000`                 |
-| Memory pressure             | Micro-batching via `EMBEDDING_BATCH_SIZE=100`                |
-| Inter-batch delay           | Configurable via `EMBEDDING_BATCH_DELAY_MS=1000`             |
+| gRPC 64MB message limit     | Split inserts via `MILVUS_INSERT_BATCH=5000`                     |
+| Memory pressure             | Micro-batching via `EMBEDDING_BATCH_SIZE=100`                    |
+| Inter-batch delay           | Configurable via `EMBEDDING_BATCH_DELAY_MS=1000`                 |
 
 </details>
 
@@ -437,14 +460,14 @@ No manual cleanup needed — just delete the file and re-index.
 
 ### MCP vs Shell — When to use which?
 
-| Scenario                         | MCP `index_documents` | Shell `reindex.py` |
-| -------------------------------- | :-------------------: | :----------------: |
-| Incremental update (few files)   |           ✅           |                    |
-| Full reindex (1000+ files)       |                       |         ✅          |
-| Monorepo / large codebase        |                       |         ✅          |
-| Debugging 429/gRPC errors        |                       |         ✅          |
-| Real-time progress logs          |                       |         ✅          |
-| AI agent automatic execution     |           ✅           |                    |
+| Scenario                       | MCP `index_documents` | Shell `reindex.py` |
+| ------------------------------ | :-------------------: | :----------------: |
+| Incremental update (few files) |           ✅           |                    |
+| Full reindex (1000+ files)     |                       |         ✅          |
+| Monorepo / large codebase      |                       |         ✅          |
+| Debugging 429/gRPC errors      |                       |         ✅          |
+| Real-time progress logs        |                       |         ✅          |
+| AI agent automatic execution   |           ✅           |                    |
 
 MCP tools (`index_documents`) only return final results — no real-time logs, and long indexing runs risk timeout. `reindex.py` runs directly in the shell with real-time batch progress, errors, and elapsed time.
 
@@ -585,8 +608,8 @@ index_documents(directory, recursive=true) → search_documents(query, k)
 {
   "mcpServers": {
     "markdown-rag": {
-      "command": "uv",
-      "args": ["--directory", "/path/to/markdown-fastrag-mcp", "run", "server.py"],
+      "command": "uvx",
+      "args": ["markdown-fastrag-mcp"],
       "env": {
         "EMBEDDING_PROVIDER": "vertex",
         "EMBEDDING_MODEL": "gemini-embedding-001",
@@ -610,7 +633,7 @@ index_documents(directory, recursive=true) → search_documents(query, k)
 ## Debugging
 
 ```bash
-npx @modelcontextprotocol/inspector uv --directory /path/to/markdown-fastrag-mcp run server.py
+npx @modelcontextprotocol/inspector uvx markdown-fastrag-mcp
 ```
 
 ## License
