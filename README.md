@@ -1,4 +1,4 @@
-# MCP-Markdown-RAG
+# Markdown-FastRAG-MCP
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green)](LICENSE)
 [![MCP Server](https://img.shields.io/badge/MCP-Server-blue)](https://modelcontextprotocol.io)
@@ -90,7 +90,7 @@ Requires [uv](https://docs.astral.sh/uv/) (Python package manager).
 ### 1. Clone
 
 ```bash
-git clone https://github.com/bitkyc08-arch/mcp-markdown-rag.git
+git clone https://github.com/bitkyc08-arch/markdown-fastrag-mcp.git
 ```
 
 ### 2. Configure
@@ -103,7 +103,7 @@ Add to your MCP host config:
     "markdown-rag": {
       "command": "uv",
       "args": [
-        "--directory", "/path/to/mcp-markdown-rag",
+        "--directory", "/path/to/markdown-fastrag-mcp",
         "run", "server.py"
       ],
       "env": {
@@ -442,7 +442,7 @@ MCP 도구(`index_documents`)는 **최종 결과만 반환**하기 때문에 실
 ### Usage
 
 ```bash
-cd /path/to/mcp-markdown-rag
+cd /path/to/markdown-fastrag-mcp
 
 # Incremental (changed + deleted files only)
 EMBEDDING_PROVIDER=vertex \
@@ -577,7 +577,7 @@ index_documents(directory, recursive=true) → search_documents(query, k)
   "mcpServers": {
     "markdown-rag": {
       "command": "uv",
-      "args": ["--directory", "/path/to/mcp-markdown-rag", "run", "server.py"],
+      "args": ["--directory", "/path/to/markdown-fastrag-mcp", "run", "server.py"],
       "env": {
         "EMBEDDING_PROVIDER": "vertex",
         "EMBEDDING_MODEL": "gemini-embedding-001",
@@ -601,7 +601,7 @@ index_documents(directory, recursive=true) → search_documents(query, k)
 ## Debugging
 
 ```bash
-npx @modelcontextprotocol/inspector uv --directory /path/to/mcp-markdown-rag run server.py
+npx @modelcontextprotocol/inspector uv --directory /path/to/markdown-fastrag-mcp run server.py
 ```
 
 ## License

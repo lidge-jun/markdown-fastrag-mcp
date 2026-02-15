@@ -224,8 +224,8 @@ Shell `reindex.py`는 동일 작업 3초 완료.
 `~/.gemini/antigravity/mcp_config.json`의 `--directory`가 구 iCloud 경로를 가리키고 있었음:
 
 ```diff
-- "/Users/jun/Library/Mobile Documents/iCloud~md~obsidian/Documents/new/700_projects/mcp-markdown-rag"
-+ "/Users/jun/Developer/new/700_projects/mcp-markdown-rag"
+- "/Users/jun/Library/Mobile Documents/iCloud~md~obsidian/Documents/new/700_projects/markdown-fastrag-mcp"
++ "/Users/jun/Developer/new/700_projects/markdown-fastrag-mcp"
 ```
 
 구 iCloud 경로의 `.db/index_tracking.json`이 **빈 파일** (0줄) → MCP 서버가 매번 1326개 파일 전체를 신규로 인식 → 전체 임베딩 시도 → 타임아웃.

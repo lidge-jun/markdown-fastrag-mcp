@@ -1358,6 +1358,29 @@ wheels = [
 ]
 
 [[package]]
+name = "markdown-fastrag-mcp"
+version = "1.0.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "fastmcp" },
+    { name = "google-auth" },
+    { name = "llama-index" },
+    { name = "openai" },
+    { name = "pymilvus", extra = ["model"] },
+    { name = "voyageai" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastmcp", specifier = ">=2.10.2" },
+    { name = "google-auth", specifier = ">=2.20.0" },
+    { name = "llama-index", specifier = ">=0.12.45" },
+    { name = "openai", specifier = ">=1.0.0" },
+    { name = "pymilvus", extras = ["model"], specifier = ">=2.5.11" },
+    { name = "voyageai", specifier = ">=0.3.0" },
+]
+
+[[package]]
 name = "markdown-it-py"
 version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1458,29 +1481,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/7c/68/63045305f29ff680a9cd5be360c755270109e6b76f696ea6824547ddbc30/mcp-1.10.1.tar.gz", hash = "sha256:aaa0957d8307feeff180da2d9d359f2b801f35c0c67f1882136239055ef034c2", size = 392969, upload-time = "2025-06-27T12:03:08.982Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d7/3f/435a5b3d10ae242a9d6c2b33175551173c3c61fe637dc893be05c4ed0aaf/mcp-1.10.1-py3-none-any.whl", hash = "sha256:4d08301aefe906dce0fa482289db55ce1db831e3e67212e65b5e23ad8454b3c5", size = 150878, upload-time = "2025-06-27T12:03:07.328Z" },
-]
-
-[[package]]
-name = "mcp-markdown-rag"
-version = "1.0.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "fastmcp" },
-    { name = "google-auth" },
-    { name = "llama-index" },
-    { name = "openai" },
-    { name = "pymilvus", extra = ["model"] },
-    { name = "voyageai" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastmcp", specifier = ">=2.10.2" },
-    { name = "google-auth", specifier = ">=2.20.0" },
-    { name = "llama-index", specifier = ">=0.12.45" },
-    { name = "openai", specifier = ">=1.0.0" },
-    { name = "pymilvus", extras = ["model"], specifier = ">=2.5.11" },
-    { name = "voyageai", specifier = ">=0.3.0" },
 ]
 
 [[package]]

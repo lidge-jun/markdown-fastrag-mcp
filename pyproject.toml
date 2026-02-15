@@ -3,7 +3,7 @@
 # Extended with multi-provider embeddings, configurable Milvus, and batch processing.
 
 [project]
-name = "mcp-markdown-rag"
+name = "markdown-fastrag-mcp"
 version = "1.0.0"
 description = "Semantic search engine for markdown documents. MCP server with multi-provider embeddings and Milvus vector storage."
 readme = "README.md"

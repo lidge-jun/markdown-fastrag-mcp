@@ -50,7 +50,7 @@ EMBEDDING_BATCH_DELAY_MS: 0   → 1000
 ## 사용법
 
 ```bash
-cd 700_projects/mcp-markdown-rag
+cd 700_projects/markdown-fastrag-mcp
 
 # 전체 재인덱싱
 EMBEDDING_PROVIDER=vertex \

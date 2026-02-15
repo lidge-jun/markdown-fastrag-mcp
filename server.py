@@ -32,7 +32,7 @@ from utils import (
 )
 
 mcp = FastMCP(
-    "mcp-markdown-rag",
+    "markdown-fastrag-mcp",
     instructions="""This MCP server provides semantic search capabilities over markdown files using 
     vector embeddings and Milvus database. It enables you to index markdown documents and perform 
     intelligent searches to find relevant content based on semantic similarity rather than just 
