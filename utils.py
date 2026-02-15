@@ -109,6 +109,33 @@ def get_changed_files(
     return changed_files
 
 
+def get_deleted_files(
+    directory: str,
+    recursive: bool = False,
+) -> list[str]:
+    """
+    Detect files that were tracked but no longer exist on disk
+    (deleted or moved to excluded directories like _legacy/).
+    Returns list of stale file paths and removes them from tracking.
+    """
+    tracking_data = load_tracking_file()
+    if not tracking_data:
+        return []
+
+    current_files = set(list_md_files(directory, recursive))
+    deleted_files = [
+        path for path in tracking_data
+        if path not in current_files
+    ]
+
+    if deleted_files:
+        for path in deleted_files:
+            tracking_data.pop(path, None)
+        save_tracking_file(tracking_data)
+
+    return deleted_files
+
+
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "768"))
 
 

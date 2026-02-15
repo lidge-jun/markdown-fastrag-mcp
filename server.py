@@ -27,6 +27,7 @@ from utils import (
     SearchResult,
     ensure_collection,
     get_changed_files,
+    get_deleted_files,
     list_md_files,
     update_tracking_file,
 )
@@ -276,10 +277,25 @@ async def index_documents(
     else:
         changed_files = get_changed_files(target_path, recursive=recursive)
 
-        if not changed_files:
-            return {"message": "Already up to date, Nothing to index!"}
-        # If not collection exists create a new one
+        # Prune stale vectors for deleted/moved files
         ensure_collection(milvus_client)
+        deleted_files = get_deleted_files(target_path, recursive=recursive)
+        pruned_count = 0
+        for file_path in deleted_files:
+            try:
+                milvus_client.delete(
+                    collection_name=COLLECTION_NAME, filter=f"path == '{file_path}'"
+                )
+                pruned_count += 1
+            except Exception:
+                continue
+        if pruned_count > 0:
+            print(f"[Indexer] Pruned {pruned_count} deleted/moved files from index", file=sys.stderr, flush=True)
+
+        if not changed_files:
+            if pruned_count > 0:
+                return {"message": f"Pruned {pruned_count} deleted/moved files. No new files to index."}
+            return {"message": "Already up to date, Nothing to index!"}
         # Needs to delete the old chunks related to changed files
         for file_path in changed_files:
             try:
