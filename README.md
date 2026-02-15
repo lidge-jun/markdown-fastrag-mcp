@@ -767,6 +767,43 @@ sequenceDiagram
 npx @modelcontextprotocol/inspector uvx markdown-fastrag-mcp
 ```
 
+## Agent Rules (AGENTS.md Integration)
+
+This server has a **mandatory search role** defined in `AGENTS.md`:
+
+```markdown
+## Search Role: markdown-rag
+
+- **1st tool for Korean concept/workflow queries**.
+  `search_documents(query, k=5, scope_path)`.
+- Use `scope_path` when target dir is known — relevance +5%p.
+
+### DUAL-SEARCH MANDATE
+You MUST use at least 2 tools per search. Single-tool search is FORBIDDEN.
+
+### Decision Table
+
+| What you need             | 1st tool         | 2nd tool (REQUIRED) | NEVER use     |
+| ------------------------- | ---------------- | ------------------- | ------------- |
+| Korean concept / workflow | Doc RAG (`k=5`)  | grep keyword check  | grep alone    |
+| Config value explanation  | `grep --include` | Doc RAG             | —             |
+| Latest pricing / versions | Web Search       | Doc RAG cross-check | Doc RAG alone |
+
+### Parameters
+- k: quick=3, general=5, comprehensive=10. At 5000+ docs: k=10 + scope_path.
+- scope_path: ALWAYS set when target dir is known.
+- Query language: user's language for doc search.
+
+### Anti-patterns (FORBIDDEN)
+- ❌ grep with Korean natural language → ✅ Doc RAG
+- ❌ Doc RAG to find code locations → ✅ grep or Code RAG
+- ❌ Single-tool search → ✅ Always 2+ tools
+```
+
+> Source: `AGENTS.md §3 Search`, `rag/SKILL.md`, `07.5-검색-도구-벤치마크`
+
+---
+
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE).
