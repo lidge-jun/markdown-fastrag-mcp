@@ -27,6 +27,7 @@ from server import (
     MARKDOWN_CHUNK_SIZE, MARKDOWN_CHUNK_OVERLAP,
     EMBEDDING_BATCH_SIZE, EMBEDDING_CONCURRENT_BATCHES,
     EMBEDDING_BATCH_DELAY_MS, EMBEDDING_PROVIDER,
+    MIN_CHUNK_TOKENS,
 )
 from utils import ensure_collection, get_index_delta, list_md_files, update_tracking_file
 from llama_index.core import SimpleDirectoryReader
@@ -120,7 +121,19 @@ async def reindex(target_path: str, recursive: bool = True, force: bool = False)
         chunk_size=MARKDOWN_CHUNK_SIZE, chunk_overlap=chunk_overlap
     ).get_nodes_from_documents(nodes)
     chunked_nodes = [node for node in chunked_nodes if node.text.strip()]
-    log(f"   → {len(chunked_nodes)} 청크 생성")
+
+    # Post-process: merge small chunks + inject parent header context.
+    from chunking import inject_header_prefix, merge_small_chunks
+
+    if MIN_CHUNK_TOKENS > 0:
+        pre_merge = len(chunked_nodes)
+        chunked_nodes = merge_small_chunks(
+            chunked_nodes, MIN_CHUNK_TOKENS, MARKDOWN_CHUNK_SIZE
+        )
+        if pre_merge != len(chunked_nodes):
+            log(f"   → 병합: {pre_merge} → {len(chunked_nodes)} 청크")
+    chunked_nodes = inject_header_prefix(chunked_nodes)
+    log(f"   → {len(chunked_nodes)} 청크 생성 (min_tokens={MIN_CHUNK_TOKENS})")
 
     # 3. 임베딩
     texts = [node.text for node in chunked_nodes]

@@ -80,6 +80,7 @@ EMBEDDING_BATCH_DELAY_MS = _get_int_env("EMBEDDING_BATCH_DELAY_MS", 0, minimum=0
 EMBEDDING_CONCURRENT_BATCHES = _get_int_env("EMBEDDING_CONCURRENT_BATCHES", 4, minimum=1)
 MARKDOWN_BG_MAX_JOBS = _get_int_env("MARKDOWN_BG_MAX_JOBS", 1, minimum=1)
 MARKDOWN_BG_JOB_TTL_SECONDS = _get_int_env("MARKDOWN_BG_JOB_TTL_SECONDS", 1800, minimum=1)
+MIN_CHUNK_TOKENS = _get_int_env("MIN_CHUNK_TOKENS", 300, minimum=0)
 
 
 class VertexEmbeddingFunction:
@@ -237,7 +238,8 @@ print(
     f"chunk_size={MARKDOWN_CHUNK_SIZE} "
     f"chunk_overlap={MARKDOWN_CHUNK_OVERLAP} "
     f"batch_size={EMBEDDING_BATCH_SIZE} "
-    f"batch_delay_ms={EMBEDDING_BATCH_DELAY_MS}",
+    f"batch_delay_ms={EMBEDDING_BATCH_DELAY_MS} "
+    f"min_chunk_tokens={MIN_CHUNK_TOKENS}",
     file=sys.stderr,
 )
 print(
@@ -492,6 +494,15 @@ async def _run_index_job(
         chunk_size=MARKDOWN_CHUNK_SIZE, chunk_overlap=chunk_overlap
     ).get_nodes_from_documents(nodes)
     chunked_nodes = [node for node in chunked_nodes if node.text.strip()]
+
+    # Post-process: merge small chunks + inject parent header context.
+    from chunking import inject_header_prefix, merge_small_chunks
+
+    if MIN_CHUNK_TOKENS > 0:
+        chunked_nodes = merge_small_chunks(
+            chunked_nodes, MIN_CHUNK_TOKENS, MARKDOWN_CHUNK_SIZE
+        )
+    chunked_nodes = inject_header_prefix(chunked_nodes)
 
     # Extract text from nodes and embed (parallel batches for speed).
     texts = [node.text for node in chunked_nodes]

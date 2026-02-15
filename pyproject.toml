@@ -45,4 +45,4 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
-include = ["server.py", "utils.py", "reindex.py"]
+include = ["server.py", "utils.py", "reindex.py", "chunking.py"]
