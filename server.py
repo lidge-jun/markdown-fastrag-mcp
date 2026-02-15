@@ -253,7 +253,7 @@ def search(query: str, k: int) -> list[list[SearchResult]]:
 async def index_documents(
     current_working_directory: str = Field(description="Current working directory"),
     directory: str = Field("", description="Directory to index"),
-    recursive: bool = Field(False, description="Recursively index subdirectories"),
+    recursive: bool = Field(True, description="Recursively index subdirectories"),
     force_reindex: bool = Field(False, description="Force reindex"),
 ):
     # TODO: Implement Client Elicitation when it is available in Popular clients
