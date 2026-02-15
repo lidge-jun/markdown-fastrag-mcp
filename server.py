@@ -651,34 +651,10 @@ def search(query: str, k: int) -> list[list[SearchResult]]:
 
 @mcp.tool(
     name="index_documents",
-    description="Index Markdown files for semantic search using Milvus.",
-    tags={"index", "vectorize", "store"},
-)
-async def index_documents(
-    current_working_directory: str = Field(description="Current working directory"),
-    directory: str = Field("", description="Directory to index"),
-    recursive: bool = Field(True, description="Recursively index subdirectories"),
-    force_reindex: bool = Field(False, description="Force reindex"),
-):
-    target_path = os.path.join(current_working_directory, directory)
-    recursive, recursive_warning = _normalize_recursive(recursive)
-    result = await _run_index_job(
-        target_path=target_path,
-        recursive=recursive,
-        force_reindex=force_reindex,
-        job=None,
-    )
-    if recursive_warning:
-        result["warning"] = recursive_warning
-    return result
-
-
-@mcp.tool(
-    name="start_index_documents",
-    description="Start a background markdown indexing job and return immediately.",
+    description="Index Markdown files. Returns IMMEDIATELY with job_id (non-blocking). Poll get_index_status until status='succeeded' before calling search_documents. Do NOT search while indexing.",
     tags={"index", "background", "async"},
 )
-async def start_index_documents(
+async def index_documents(
     current_working_directory: str = Field(description="Current working directory"),
     directory: str = Field("", description="Directory to index"),
     recursive: bool = Field(True, description="Recursively index subdirectories"),
