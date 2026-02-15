@@ -18,3 +18,4 @@ demo/
 # Internal development logs
 devlog/
 dist/
+uv.lock
