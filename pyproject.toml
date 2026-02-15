@@ -4,7 +4,7 @@
 
 [project]
 name = "markdown-fastrag-mcp"
-version = "1.2.0"
+version = "1.2.1"
 description = "Semantic search engine for markdown documents. MCP server with multi-provider embeddings and Milvus vector storage."
 readme = "README.md"
 license = "Apache-2.0"
