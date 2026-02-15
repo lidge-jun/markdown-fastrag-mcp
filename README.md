@@ -55,6 +55,7 @@ Add to your MCP host config:
 - **Semantic matching** — finds conceptually related content, not just keyword hits
 - **Multi-provider embeddings** — Gemini, OpenAI, Vertex AI, Voyage, or local models
 - **Smart chunk merging** — small chunks below `MIN_CHUNK_TOKENS` are merged with siblings; parent header context is injected for each chunk
+- **Frontmatter strip + metadata** — YAML frontmatter is stripped before embedding to reduce noise; `tags` and `aliases` are parsed and stored as Milvus metadata fields for future filtering
 - **Search dedup** — per-file result limiting prevents a single document from dominating search results; k×5 oversampling ensures diversity
 - **Async background indexing** — non-blocking `index_documents` returns instantly with `job_id`; poll progress with `get_index_status`
 - **Smart incremental indexing** — mtime/size fast-path skips unchanged files without reading them; hash only computed when metadata changes

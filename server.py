@@ -488,6 +488,21 @@ async def _run_index_job(
             total_files=len(processed_files),
         )
 
+    # Pre-process: strip YAML frontmatter from documents BEFORE chunking.
+    # LlamaIndex propagates doc.metadata to all child nodes automatically.
+    from chunking import (
+        _normalize_meta,
+        inject_header_prefix,
+        merge_small_chunks,
+        strip_frontmatter,
+    )
+
+    for doc in documents:
+        clean_text, fm = strip_frontmatter(doc.text)
+        doc.text = clean_text
+        doc.metadata["tags"] = _normalize_meta(fm.get("tags"))
+        doc.metadata["aliases"] = _normalize_meta(fm.get("aliases"))
+
     # Convert to nodes based on markdown structure, then split larger nodes into chunks.
     nodes = MarkdownNodeParser(chunk_size=MARKDOWN_CHUNK_SIZE).get_nodes_from_documents(documents)
     chunk_overlap = min(MARKDOWN_CHUNK_OVERLAP, max(0, MARKDOWN_CHUNK_SIZE - 1))
@@ -497,8 +512,6 @@ async def _run_index_job(
     chunked_nodes = [node for node in chunked_nodes if node.text.strip()]
 
     # Post-process: merge small chunks + inject parent header context.
-    from chunking import inject_header_prefix, merge_small_chunks
-
     if MIN_CHUNK_TOKENS > 0:
         chunked_nodes = merge_small_chunks(
             chunked_nodes, MIN_CHUNK_TOKENS, MARKDOWN_CHUNK_SIZE
@@ -567,6 +580,8 @@ async def _run_index_job(
             "text": node.text,
             "filename": node.metadata["file_name"],
             "path": node.metadata["file_path"],
+            "tags": node.metadata.get("tags", ""),
+            "aliases": node.metadata.get("aliases", ""),
         }
         for vector, node in zip(vectors, chunked_nodes)
     ]
@@ -876,14 +891,20 @@ async def search_documents(
 
     results = search(query, k=k, scope_path=scope_path)
 
-    return "\n---\n".join(
-        [
+    parts = []
+    for res in results[0]:
+        entry = (
             f"File: **{res.entity.filename}** (relevance: {res.distance:.1%})\n"
-            f"Path: `{res.entity.path}`\n---\n"
-            f"Text: {res.entity.text}\n---\n"
-            for res in results[0]
-        ]
-    )
+            f"Path: `{res.entity.path}`\n"
+        )
+        if res.entity.tags:
+            entry += f"Tags: {res.entity.tags}\n"
+        if res.entity.aliases:
+            entry += f"Aliases: {res.entity.aliases}\n"
+        entry += f"---\nText: {res.entity.text}\n---\n"
+        parts.append(entry)
+
+    return "\n---\n".join(parts)
 
 
 @mcp.tool(

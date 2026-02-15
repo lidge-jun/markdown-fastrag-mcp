@@ -18,6 +18,8 @@ class Entity(BaseModel):
     text: str
     filename: str
     path: str
+    tags: str = ""
+    aliases: str = ""
 
 
 class SearchResult(BaseModel):

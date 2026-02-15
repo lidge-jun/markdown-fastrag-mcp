@@ -1,9 +1,10 @@
 """
-chunking.py — Small chunk merge + parent header prefix injection.
+chunking.py — Frontmatter strip + small chunk merge + parent header prefix.
 
 Post-processes LlamaIndex nodes to:
-1. Merge adjacent small chunks (< MIN_CHUNK_TOKENS) within the same file.
-2. Inject parent header path as a prefix for richer search context.
+1. Strip YAML frontmatter and parse tags/aliases for metadata storage.
+2. Merge adjacent small chunks (< MIN_CHUNK_TOKENS) within the same file.
+3. Inject parent header path as a prefix for richer search context.
 
 Used by both server.py and reindex.py to prevent pipeline drift.
 """
@@ -13,8 +14,53 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+import yaml
+
 if TYPE_CHECKING:
     from llama_index.core.schema import TextNode
+
+
+# ---------------------------------------------------------------------------
+# Frontmatter stripping
+# ---------------------------------------------------------------------------
+
+_FM_RE = re.compile(r"\A---\r?\n(.*?)---\r?\n", re.DOTALL)
+
+
+def _normalize_meta(val: object) -> str:
+    """Safely convert YAML-parsed value (None, str, list, etc.) to comma string.
+
+    Handles all Obsidian edge cases:
+      - ``tags: ``  (empty) → yaml parses as None → returns ""
+      - ``tags: RAG`` (bare string) → returns "RAG" (not "R,A,G")
+      - ``tags: [RAG, Milvus]`` (list) → returns "RAG, Milvus"
+    """
+    if not val:
+        return ""
+    if isinstance(val, str):
+        return val.strip()
+    if isinstance(val, list):
+        return ", ".join(str(v).strip() for v in val if v)
+    return str(val)
+
+
+def strip_frontmatter(text: str) -> tuple[str, dict]:
+    """Remove YAML frontmatter and return (clean_text, parsed_dict).
+
+    Parses ``tags`` and ``aliases`` from the YAML block.
+    Returns empty dict on missing/malformed frontmatter.
+    CRLF-safe (handles both ``\\n`` and ``\\r\\n``).
+    """
+    match = _FM_RE.match(text)
+    if not match:
+        return text, {}
+    try:
+        fm = yaml.safe_load(match.group(1))
+        if not isinstance(fm, dict):
+            fm = {}
+    except Exception:
+        fm = {}
+    return text[match.end():], fm
 
 # ---------------------------------------------------------------------------
 # Token counting (tiktoken via llama-index transitive dep, fallback len//4)
