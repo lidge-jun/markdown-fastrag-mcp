@@ -66,6 +66,7 @@ Add to your MCP host config:
 - **Scoped search** — `scope_path` parameter filters results to a subdirectory without separate indexing
 - **Workspace lock** — set `MARKDOWN_WORKSPACE` to fix the root directory; agents can't accidentally scope to subdirectories
 - **Stale vector pruning** — automatically removes vectors for deleted or moved files from Milvus
+- **Reconciliation sweep** — after each indexing run, queries all Milvus paths and deletes orphan vectors whose source files no longer exist on disk. Catches ghosts that tracking-based pruning misses (e.g., after `clear_index` or tracking file reset)
 - **Batch embedding** — concurrent batches with rate-limit retry (429 exponential backoff)
 - **Batch insert** — chunked Milvus inserts to stay under the gRPC 64MB message limit
 - **Shell reindex CLI** — `reindex.py` for large-scale indexing with real-time progress logs
@@ -571,6 +572,49 @@ When a file is deleted or moved to an excluded directory (e.g. `_legacy/`), the 
 4. Return a message: `"Pruned N deleted/moved files."`
 
 No manual cleanup needed — just delete the file and re-index.
+
+### Reconciliation Sweep
+
+Tracking-based pruning catches deletions during normal indexing, but can miss **ghost vectors** when:
+- The tracking file is reset (e.g., after `clear_index` or manual deletion)
+- Files are moved outside the indexed workspace
+- A previous indexing job was interrupted mid-write
+
+The **reconciliation sweep** runs automatically after each indexing job to catch these edge cases:
+
+```mermaid
+flowchart LR
+    A["🔍 Query Milvus\n(all paths, paginated)"] --> B{"File exists\non disk?"}
+    B -->|Yes| C["✅ Keep"]
+    B -->|No| D["🗑️ Delete vectors\nfilter: path == '...'"]
+    D --> E["📊 Report\nreconciled_orphans count"]
+
+    style A fill:#2a4365,color:#bee3f8
+    style C fill:#22543d,color:#c6f6d5
+    style D fill:#742a2a,color:#fed7d7
+    style E fill:#744210,color:#fefcbf
+```
+
+**How it works:**
+
+1. Query all unique `path` values from Milvus (paginated, max 16,384 per query)
+2. Check `os.path.exists()` for each path on disk
+3. Delete vectors for orphan paths via `filter="path == '...'"`
+4. Report `reconciled_orphans` count in the `get_index_status` result
+
+**When it runs:** After `_execute_index_job` sets `status = "succeeded"`, before returning the result. Search is already available during reconciliation since it only deletes stale entries.
+
+**Status response** (via `get_index_status`):
+
+```json
+{
+  "status": "succeeded",
+  "reconciled_orphans": 280,
+  "reconcile_seconds": 1.84
+}
+```
+
+> Reconciliation is independent of `index_tracking.json` — it directly compares Milvus ↔ disk, making it a safety net against all forms of ghost vectors.
 
 ## Shell Reindex CLI
 

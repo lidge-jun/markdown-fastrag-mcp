@@ -716,6 +716,73 @@ async def _run_index_job(
     return result
 
 
+async def _reconcile_orphans() -> int:
+    """Milvus path ↔ disk reconciliation. Delete orphan chunks.
+
+    Independent of tracking file. Works even after tracking reset.
+    Phase 14: Called after succeeded, search already allowed.
+    """
+    _QUERY_LIMIT = 16384  # Milvus max per query
+
+    def _do_reconcile() -> int:
+        # 1. Paginated query: collect all unique paths + their IDs
+        path_to_ids: dict[str, list[int]] = {}
+        offset = 0
+        while True:
+            results = milvus_client.query(
+                collection_name=COLLECTION_NAME,
+                filter="id >= 0",
+                output_fields=["path", "id"],
+                limit=_QUERY_LIMIT,
+                offset=offset,
+            )
+            if not results:
+                break
+            for r in results:
+                path_to_ids.setdefault(r["path"], []).append(r["id"])
+            if len(results) < _QUERY_LIMIT:
+                break
+            offset += _QUERY_LIMIT
+
+        # 2. Check disk existence → collect orphans
+        orphan_ids: list[int] = []
+        orphan_paths: list[str] = []
+        for source_path, ids in path_to_ids.items():
+            if not os.path.exists(source_path):
+                orphan_ids.extend(ids)
+                orphan_paths.append(source_path)
+
+        # 3. Delete orphans via filter (safe single-quote escape)
+        if orphan_paths:
+            delete_failed = 0
+            for op in orphan_paths:
+                safe_path = op.replace("'", "\\'")
+                try:
+                    milvus_client.delete(
+                        collection_name=COLLECTION_NAME,
+                        filter=f"path == '{safe_path}'",
+                    )
+                except Exception as exc:
+                    delete_failed += 1
+                    print(
+                        f"[Reconcile] Delete failed for {op}: {exc}",
+                        file=sys.stderr, flush=True,
+                    )
+            actual_removed = len(orphan_paths) - delete_failed
+            print(
+                f"[Reconcile] Removed {actual_removed} orphan paths "
+                f"({len(orphan_ids)} chunks) from {len(orphan_paths)} missing files"
+                + (f" ({delete_failed} failed)" if delete_failed else ""),
+                file=sys.stderr, flush=True,
+            )
+            for p in orphan_paths:
+                print(f"  orphan: {p}", file=sys.stderr, flush=True)
+
+        return len(orphan_ids)
+
+    return await asyncio.to_thread(_do_reconcile)
+
+
 async def _execute_index_job(
     job_id: str,
     target_path: str,
@@ -747,6 +814,26 @@ async def _execute_index_job(
             job.status = "succeeded"
         if job.progress_percent < 100:
             _set_job_progress(job, phase="done", percent=100, message="Index job completed")
+
+        # Phase 14: Reconciliation sweep (succeeded → search already allowed)
+        t_reconcile_start = time.monotonic()
+        try:
+            reconciled = await _reconcile_orphans()
+        except Exception as reconcile_exc:
+            print(
+                f"[Reconcile] Error: {reconcile_exc}",
+                file=sys.stderr, flush=True,
+            )
+            reconciled = 0
+        t_reconcile = time.monotonic() - t_reconcile_start
+
+        if result is not None:
+            result["reconciled_orphans"] = reconciled
+            if "timings_seconds" in result and result["timings_seconds"] is not None:
+                result["timings_seconds"]["reconcile"] = round(t_reconcile, 2)
+            else:
+                result["reconcile_seconds"] = round(t_reconcile, 2)
+
     except Exception as exc:
         job.status = "failed"
         job.phase = "failed"
