@@ -126,12 +126,15 @@ async def reindex(target_path: str, recursive: bool = True, force: bool = False)
     from chunking import (
         _normalize_meta,
         inject_header_prefix,
+        is_structural_only,
         merge_small_chunks,
         strip_frontmatter,
     )
 
     # Strip YAML frontmatter from nodes and collect tags/aliases per file.
     file_meta: dict[str, dict[str, str]] = {}  # path -> {tags, aliases}
+    filtered_nodes = []
+    dropped_after_strip = 0
     for node in chunked_nodes:
         fp = node.metadata.get("file_path", "")
         clean_text, fm = strip_frontmatter(node.text)
@@ -141,6 +144,11 @@ async def reindex(target_path: str, recursive: bool = True, force: bool = False)
                 "tags": _normalize_meta(fm.get("tags")),
                 "aliases": _normalize_meta(fm.get("aliases")),
             }
+        if is_structural_only(node.text):
+            dropped_after_strip += 1
+            continue
+        filtered_nodes.append(node)
+    chunked_nodes = filtered_nodes
 
     if MIN_CHUNK_TOKENS > 0:
         pre_merge = len(chunked_nodes)
@@ -150,6 +158,14 @@ async def reindex(target_path: str, recursive: bool = True, force: bool = False)
         if pre_merge != len(chunked_nodes):
             log(f"   → 병합: {pre_merge} → {len(chunked_nodes)} 청크")
     chunked_nodes = inject_header_prefix(chunked_nodes)
+    before_post_prefix_filter = len(chunked_nodes)
+    chunked_nodes = [node for node in chunked_nodes if not is_structural_only(node.text)]
+    dropped_after_prefix = before_post_prefix_filter - len(chunked_nodes)
+    if dropped_after_strip or dropped_after_prefix:
+        log(
+            "   → 구조/빈 청크 제거: "
+            f"strip={dropped_after_strip}, prefix={dropped_after_prefix}"
+        )
     log(f"   → {len(chunked_nodes)} 청크 생성 (min_tokens={MIN_CHUNK_TOKENS})")
 
     # 3. 임베딩

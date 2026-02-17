@@ -4,13 +4,20 @@ Performance optimizations implemented in markdown-fastrag-mcp.
 
 ```mermaid
 flowchart LR
-    A["Raw Chunks"] --> B{"< MIN_CHUNK_TOKENS?"}
+    A["Raw Chunks"] --> S["Strip frontmatter"]
+    S --> FI{"Structural\nonly?"}
+    FI -->|Yes| DROP1["Drop"]
+    FI -->|No| B{"< MIN_CHUNK_TOKENS?"}
     B -->|Yes| C["Merge with sibling"]
     B -->|No| D["Keep as-is"]
     C --> E["Inject parent headers"]
     D --> E
-    E --> F["Embed + Insert"]
+    E --> FI2{"Structural\nonly?"}
+    FI2 -->|Yes| DROP2["Drop"]
+    FI2 -->|No| F["Embed + Insert"]
 
+    style DROP1 fill:#742a2a,color:#fed7d7
+    style DROP2 fill:#742a2a,color:#fed7d7
     style C fill:#744210,color:#fefcbf
     style E fill:#553c9a,color:#e9d8fd
     style F fill:#22543d,color:#c6f6d5
@@ -56,6 +63,24 @@ Tested values:
 - **200**: More chunks, slightly better precision for short queries
 - **300** (default): Good balance of chunk quality and granularity
 - **500**: Fewer chunks, better for long-form documents
+
+## Empty Chunk Filtering
+
+After frontmatter stripping (Phase 12), some chunks contain no actual prose — only YAML metadata, markdown headers, or horizontal rules. These produce low-quality embeddings and pollute search results.
+
+**Solution:** `is_structural_only()` detects chunks where every non-blank line is a header (`#{1,6} `) or separator (`---`, `***`, `___`). These are dropped at two points in the indexing pipeline and also filtered at search time:
+
+| Filter point                   | When     | Effect                                   |
+| ------------------------------ | -------- | ---------------------------------------- |
+| After `strip_frontmatter()`    | Indexing | Drops empty chunks before merge          |
+| After `inject_header_prefix()` | Indexing | Catches edge cases from prefix injection |
+| In `search()` results          | Runtime  | Filters stale vectors without reindexing |
+
+The runtime filter also re-applies `strip_frontmatter()` to Milvus results, handling vectors indexed before Phase 15.
+
+### Regex fix: trailing newline
+
+The original `_FM_RE` regex required a trailing newline after the closing `---`. Chunks stored in Milvus without a trailing newline bypassed the runtime filter entirely. Fixed by making the trailing newline optional: `(?:\r?\n|$)`.
 
 ## Batch Insert with gRPC Size Limit
 

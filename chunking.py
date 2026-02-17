@@ -1,10 +1,11 @@
 """
-chunking.py — Frontmatter strip + small chunk merge + parent header prefix.
+chunking.py — Frontmatter strip + empty/structural drop + small merge + header prefix.
 
 Post-processes LlamaIndex nodes to:
 1. Strip YAML frontmatter and parse tags/aliases for metadata storage.
-2. Merge adjacent small chunks (< MIN_CHUNK_TOKENS) within the same file.
-3. Inject parent header path as a prefix for richer search context.
+2. Drop empty/structural-only chunks after frontmatter stripping.
+3. Merge adjacent small chunks (< MIN_CHUNK_TOKENS) within the same file.
+4. Inject parent header path as a prefix for richer search context.
 
 Used by both server.py and reindex.py to prevent pipeline drift.
 """
@@ -24,7 +25,10 @@ if TYPE_CHECKING:
 # Frontmatter stripping
 # ---------------------------------------------------------------------------
 
-_FM_RE = re.compile(r"\A---\r?\n(.*?)---\r?\n", re.DOTALL)
+_FM_RE = re.compile(
+    r"\A(?:\ufeff)?(?:[ \t]*\r?\n)*---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|$)",
+    re.DOTALL,
+)
 
 
 def _normalize_meta(val: object) -> str:
@@ -86,6 +90,7 @@ except Exception:
 # ---------------------------------------------------------------------------
 
 _HEADER_RE = re.compile(r"^#{1,6}\s")
+_HRULE_RE = re.compile(r"^(?:-{3,}|\*{3,}|_{3,})$")
 
 
 def is_header_only(text: str) -> bool:
@@ -94,6 +99,14 @@ def is_header_only(text: str) -> bool:
     if not lines:
         return True
     return all(_HEADER_RE.match(line) for line in lines)
+
+
+def is_structural_only(text: str) -> bool:
+    """True when text has no semantic content (only headers/separators/blank)."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return True
+    return all(_HEADER_RE.match(line) or _HRULE_RE.match(line) for line in lines)
 
 
 # ---------------------------------------------------------------------------

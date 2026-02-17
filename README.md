@@ -56,6 +56,7 @@ Add to your MCP host config:
 - **Smart incremental indexing** — mtime/size fast-path skips unchanged files without reading them
 - **3-way delta scan** — classifies files as new/modified/deleted in one walk; new files skip Milvus delete
 - **Smart chunk merging** — small chunks below `MIN_CHUNK_TOKENS` are merged with siblings; parent header context injected
+- **Empty chunk filtering** — frontmatter-only and structural-only chunks (headers/separators with no prose) are dropped at indexing and filtered at search time
 - **Reconciliation sweep** — after each index run, queries all Milvus paths and deletes orphan vectors whose source files no longer exist on disk
 - **Search dedup** — per-file result limiting prevents a single document from dominating results
 - **Scoped search & pruning** — `scope_path` filters results to subdirectories; pruning never wipes unrelated data
@@ -145,5 +146,6 @@ This project is a fork of [MCP-Markdown-RAG](https://github.com/Zackriya-Solutio
 - Non-blocking background indexing with `asyncio.to_thread`
 - 3-way delta scan (new/modified/deleted)
 - Smart chunk merging with parent header injection
+- Empty chunk filtering (frontmatter-only / structural-only drop)
 - Reconciliation sweep (Milvus↔disk ghost vector cleanup)
 - Scoped search & pruning, batch embedding, shell CLI

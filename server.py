@@ -532,6 +532,7 @@ async def _run_index_job(
     from chunking import (
         _normalize_meta,
         inject_header_prefix,
+        is_structural_only,
         merge_small_chunks,
         strip_frontmatter,
     )
@@ -549,6 +550,8 @@ async def _run_index_job(
 
         # Strip YAML frontmatter from nodes and collect tags/aliases per file.
         f_meta: dict[str, dict[str, str]] = {}
+        filtered_chunked = []
+        dropped_after_strip = 0
         for node in chunked:
             fp = node.metadata.get("file_path", "")
             clean_text, fm = strip_frontmatter(node.text)
@@ -558,12 +561,27 @@ async def _run_index_job(
                     "tags": _normalize_meta(fm.get("tags")),
                     "aliases": _normalize_meta(fm.get("aliases")),
                 }
+            if is_structural_only(node.text):
+                dropped_after_strip += 1
+                continue
+            filtered_chunked.append(node)
+        chunked = filtered_chunked
 
         if MIN_CHUNK_TOKENS > 0:
             chunked = merge_small_chunks(
                 chunked, MIN_CHUNK_TOKENS, MARKDOWN_CHUNK_SIZE
             )
         chunked = inject_header_prefix(chunked)
+        before_post_prefix_filter = len(chunked)
+        chunked = [node for node in chunked if not is_structural_only(node.text)]
+        dropped_after_prefix = before_post_prefix_filter - len(chunked)
+        if dropped_after_strip or dropped_after_prefix:
+            print(
+                "[Chunking] Dropped structural/empty chunks: "
+                f"after_strip={dropped_after_strip}, after_prefix={dropped_after_prefix}",
+                file=sys.stderr,
+                flush=True,
+            )
         return chunked, f_meta
 
     chunked_nodes, file_meta = await asyncio.to_thread(_do_chunking, documents)
@@ -850,6 +868,8 @@ async def _execute_index_job(
             _cleanup_expired_jobs_locked()
 
 def search(query: str, k: int, scope_path: str = "") -> list[list[SearchResult]]:
+    from chunking import is_structural_only, strip_frontmatter
+
     # Oversampling: fetch extra candidates so dedup can fill k slots with diverse files.
     oversample = max(k * 5, 20) if DEDUP_MAX_PER_FILE > 0 else k
     query_vectors = embedding_fn.encode_queries([query])
@@ -867,13 +887,28 @@ def search(query: str, k: int, scope_path: str = "") -> list[list[SearchResult]]
         search_params["filter"] = f"path like '{safe_prefix}%'"
     res = milvus_client.search(**search_params)
 
-    if not res or DEDUP_MAX_PER_FILE <= 0:
+    if not res:
         return res
+
+    filtered_hits = []
+    for hit in res[0]:
+        text = getattr(hit.entity, "text", "") or ""
+        text, _ = strip_frontmatter(text)
+        try:
+            hit.entity.text = text
+        except Exception:
+            pass
+        if is_structural_only(text):
+            continue
+        filtered_hits.append(hit)
+
+    if DEDUP_MAX_PER_FILE <= 0:
+        return [filtered_hits[:k]]
 
     # Dedup: limit results per file path to ensure diverse sources.
     deduped = []
     file_count: dict[str, int] = {}
-    for hit in res[0]:
+    for hit in filtered_hits:
         fp = hit.entity.path
         count = file_count.get(fp, 0)
         if count < DEDUP_MAX_PER_FILE:
@@ -1066,6 +1101,8 @@ async def search_documents(
             )
 
     results = search(query, k=k, scope_path=scope_path)
+    if not results or not results[0]:
+        return "No meaningful results found."
 
     parts = []
     for res in results[0]:
