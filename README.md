@@ -157,3 +157,4 @@ This project is a fork of [MCP-Markdown-RAG](https://github.com/Zackriya-Solutio
 - Short chunk drop (final chunks below 150 tokens with per-chunk logging)
 - Reconciliation sweep (Milvus↔disk ghost vector cleanup)
 - Scoped search & pruning, batch embedding, shell CLI
+- VS Code Copilot MCP compatibility (dummy params for zero-required-arg tools)
