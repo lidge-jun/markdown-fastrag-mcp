@@ -84,7 +84,7 @@ def update_tracking_file(processed_files: list[str], is_clear: bool = False):
     save_tracking_file(tracking_data)
 
 
-_DEFAULT_EXCLUDE_DIRS = {"node_modules", "__pycache__", "devlog", "_legacy", "dist", "build", ".git"}
+_DEFAULT_EXCLUDE_DIRS = {"node_modules", "__pycache__", "_legacy", "dist", "build", ".git"}
 _extra = os.getenv("MARKDOWN_EXCLUDE_DIRS", "")
 EXCLUDE_DIRS = _DEFAULT_EXCLUDE_DIRS | (set(_extra.split(",")) if _extra else set())
 
