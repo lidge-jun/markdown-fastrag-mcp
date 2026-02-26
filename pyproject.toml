@@ -9,7 +9,7 @@ description = "Semantic search engine for markdown documents. MCP server with mu
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
-authors = [{ name = "bitkyc08-arch" }]
+authors = [{ name = "lidge-jun" }]
 keywords = ["mcp", "rag", "semantic-search", "milvus", "markdown", "embeddings"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -35,9 +35,9 @@ dependencies = [
 markdown-fastrag-mcp = "server:mcp.run"
 
 [project.urls]
-Homepage = "https://github.com/bitkyc08-arch/markdown-fastrag-mcp"
-Repository = "https://github.com/bitkyc08-arch/markdown-fastrag-mcp"
-Issues = "https://github.com/bitkyc08-arch/markdown-fastrag-mcp/issues"
+Homepage = "https://github.com/lidge-jun/markdown-fastrag-mcp"
+Repository = "https://github.com/lidge-jun/markdown-fastrag-mcp"
+Issues = "https://github.com/lidge-jun/markdown-fastrag-mcp/issues"
 
 [build-system]
 requires = ["hatchling"]
