@@ -77,8 +77,8 @@ def _get_int_env(name: str, default: int, minimum: int | None = None) -> int:
 
 MARKDOWN_CHUNK_SIZE = _get_int_env("MARKDOWN_CHUNK_SIZE", 2048, minimum=32)
 MARKDOWN_CHUNK_OVERLAP = _get_int_env("MARKDOWN_CHUNK_OVERLAP", 100, minimum=0)
-EMBEDDING_BATCH_SIZE = _get_int_env("EMBEDDING_BATCH_SIZE", 250, minimum=1)
-EMBEDDING_BATCH_DELAY_MS = _get_int_env("EMBEDDING_BATCH_DELAY_MS", 0, minimum=0)
+EMBEDDING_BATCH_SIZE = _get_int_env("EMBEDDING_BATCH_SIZE", 70, minimum=1)
+EMBEDDING_BATCH_DELAY_MS = _get_int_env("EMBEDDING_BATCH_DELAY_MS", 2000, minimum=0)
 EMBEDDING_CONCURRENT_BATCHES = _get_int_env("EMBEDDING_CONCURRENT_BATCHES", 4, minimum=1)
 MARKDOWN_BG_MAX_JOBS = _get_int_env("MARKDOWN_BG_MAX_JOBS", 1, minimum=1)
 MARKDOWN_BG_JOB_TTL_SECONDS = _get_int_env("MARKDOWN_BG_JOB_TTL_SECONDS", 1800, minimum=1)
